@@ -90,6 +90,9 @@ static int server_fd_table[2] = {-1, -1};
 // Storage for primary key set
 hash_table primary_hash = {0};
 
+// Storage for secondary key set
+hash_table secondary_hash = {0};
+
 // Primary server (the one that stores the primary copy for this server's secondary key set)
 static int primary_sid = -1;
 static int primary_fd = -1;
@@ -98,10 +101,58 @@ static int primary_fd = -1;
 static int secondary_sid = -1;
 static int secondary_fd = -1;
 
+//thread for heartbeat messages
+static pthread_t thread;
+
+//thread for updater
+static pthread_t up_thread;
+
+// Updater thread
+static pthread_t update_thread;
+
 
 static void cleanup();
 
 static const int hash_size = 65536;
+
+// Heartbeat Function, runs on seperate thread
+static void *heartbeat_init() {
+
+	char req_buffer[MAX_MSG_LEN] = {0};
+	mserver_ctrl_request *request = (mserver_ctrl_request *)req_buffer;
+
+	request->hdr.type = MSG_MSERVER_CTRL_REQ;
+	request->type = HEARTBEAT;
+	
+
+	while(1) {
+		request->server_id = server_id;
+		if (!send_msg(mserver_fd_out, request, sizeof(*request))) {
+			break;
+		}
+
+		sleep(1);
+	}
+
+	return NULL;
+	
+}
+
+//struct for updater thread arguments
+struct thread_arg {
+	int sid;
+};
+
+//hash iterator for sending hash key and value
+static void send_iterator_hash(const char key[KEY_SIZE], void *value, size_t value_sz, void *arg) {
+	return;
+}
+
+//Updater for the set of key, this will run on a seperate thread
+static void *key_set_updater(void *args) {
+
+	return;
+}
 
 // Initialize and start the server
 static bool init_server()
@@ -116,6 +167,7 @@ static bool init_server()
 		return false;
 	}
 	log_write("%s Server starts on host: %s\n", current_time_str(), my_host_name);
+
 
 	// Create sockets for incoming connections from clients and other servers
 	if (((my_clients_fd  = create_server(clients_port, MAX_CLIENT_SESSIONS, NULL)) < 0) ||
@@ -139,8 +191,18 @@ static bool init_server()
 		goto cleanup;
 	}
 
+	// Initialize Secondary Storage
+	if (!hash_init(&secondary_hash, hash_size)) {
+		goto cleanup;
+	}
+
+
 	// TODO: Create a separate thread that takes care of sending periodic heartbeat messages
 	// ...
+
+	pthread_create(&thread, NULL, heartbeat_init, NULL);
+
+
 
 	log_write("Server initialized\n");
 	return true;
@@ -184,7 +246,8 @@ static void cleanup()
 
 	// TODO: release all other resources
 	// ...
-
+	hash_iterate(&secondary_hash, clean_iterator_f, NULL);
+	hash_cleanup(&secondary_hash);
 }
 
 
@@ -271,9 +334,19 @@ static void process_client_message(int fd)
 			// TODO: forward the PUT request to the secondary replica
 			// ...
 
+			char recv_buffer[MAX_MSG_LEN] = {0};
+			if (!send_msg(secondary_fd, request, sizeof(*request) + value_size) ||
+				!recv_msg(secondary_fd, recv_buffer, sizeof(recv_buffer), MSG_OPERATION_RESP)) {
+					response->status = SERVER_FAILURE;
+			}
+
 			// Need to free the old value (if there was any)
 			if (old_value != NULL) {
 				free(old_value);
+			}
+
+			if (response->status == SERVER_FAILURE) {
+				break;
 			}
 
 			response->status = SUCCESS;
@@ -303,6 +376,12 @@ static bool process_server_message(int fd)
 	}
 	operation_request *request = (operation_request*)req_buffer;
 
+	// Initialize the response
+	char resp_buffer[MAX_MSG_LEN] = {0};
+	operation_response *response = (operation_response*)resp_buffer;
+	response->hdr.type = MSG_OPERATION_RESP;
+	uint16_t value_sz = 0;
+
 	// NOOP operation request is used to indicate the last message in an UPDATE sequence
 	if (request->type == OP_NOOP) {
 		log_write("Received the last server message, closing connection\n");
@@ -311,6 +390,36 @@ static bool process_server_message(int fd)
 
 	// TODO: process the message and send the response
 	// ...
+
+	// forwarded from primary server
+	if (request->type == OP_PUT) {
+
+		// Need to copy the value to dynamically allocated memory
+		size_t value_size = request->hdr.length - sizeof(*request);
+		void *value_copy = malloc(value_size);
+		if (value_copy == NULL) {
+			perror("malloc");
+			fprintf(stderr, "sid %d: Out of memory\n", server_id);
+			response->status = OUT_OF_SPACE;
+		}
+		memcpy(value_copy, request->value, value_size);
+
+		void *old_value = NULL;
+		size_t old_value_sz = 0;
+
+		// Put the <key, value> pair into the secondary hash table
+		if (!hash_put(&secondary_hash, request->key, value_copy, value_size, &old_value, &old_value_sz))
+		{
+			fprintf(stderr, "sid %d: Out of memory\n", server_id);
+			free(value_copy);
+			response->status = OUT_OF_SPACE;
+		}
+
+		response->status = SUCCESS;
+	}
+
+	// Send reply to the primary server
+	send_msg(fd, response, sizeof(*response) + value_sz);
 
 	return true;
 }
@@ -348,6 +457,14 @@ static bool process_mserver_message(int fd, bool *shutdown_requested)
 
 		// TODO: handle remaining message types
 		// ...
+
+		case UPDATE_PRIMARY:
+			response.status = CTRLREQ_SUCCESS;
+			break;
+
+		case UPDATE_SECONDARY:
+			response.status = CTRLREQ_SUCCESS;
+			break;
 
 		default:// impossible
 			assert(false);
@@ -462,7 +579,7 @@ static bool run_server_loop()
 		}
 
 		// Check for any messages from connected clients
-		for (int i = 0; i < MAX_CLIENT_SESSIONS; i++) {
+		for (int i = 0; i <= MAX_CLIENT_SESSIONS; i++) {
 			if ((client_fd_table[i] != -1) && FD_ISSET(client_fd_table[i], &rset)) {
 				process_client_message(client_fd_table[i]);
 				// Close connection after processing (semantics are "one connection per request")
