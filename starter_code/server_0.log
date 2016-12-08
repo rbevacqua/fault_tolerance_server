@@ -1,0 +1,35 @@
+Thu Dec  8 13:53:09 2016 Server starts on host: ross-N56VM
+Listening on TCP port 12122
+Listening on TCP port 21213
+Listening on TCP port 12013
+Server initialized
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Thu Dec  8 13:53:09 2016 New connection from localhost:42583
+Thu Dec  8 13:53:09 2016 Receiving a metadata server message
+Received message: type = SERVER CTRL request, length = 17, subtype = SET-SECONDARY, host = localhost, port = 32324
+Sending message: type = SERVER CTRL response, length = 5, status = Success
+Thu Dec  8 13:53:09 2016 New connection from localhost:40491
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Thu Dec  8 13:53:18 2016 Server starts on host: ross-N56VM
+Listening on TCP port 12122
+Listening on TCP port 21213
+Listening on TCP port 12013
+Server initialized
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Thu Dec  8 13:53:18 2016 New connection from localhost:42592
+Thu Dec  8 13:53:18 2016 Receiving a metadata server message
+Received message: type = SERVER CTRL request, length = 17, subtype = SET-SECONDARY, host = localhost, port = 32324
+Sending message: type = SERVER CTRL response, length = 5, status = Success
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Sending message: type = MSERVER CTRL request, length = 7, subtype = HEARTBEAT, sid = 0
+Thu Dec  8 13:53:26 2016 Receiving a metadata server message
+Received message: type = SERVER CTRL request, length = 7, subtype = SHUTDOWN
