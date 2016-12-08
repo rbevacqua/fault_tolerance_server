@@ -55,18 +55,6 @@ void log_write(const char *format, ...)
 	}
 }
 
-// perror()-style function for writing errors to both stderr and the log file
-// Prefixes messages with the pid of the calling process, so that you can distinguish between messages from mserver and
-// servers; pids of the server processes are available in mserver.c in the server_node structs
-void log_perror(const char *function)
-{
-	char msg[1024];
-
-	snprintf(msg, sizeof(msg), "[%d] %s failed with %d: %s\n", getpid(), function, errno, strerror(errno));
-	fprintf(stderr, "%s", msg);
-	log_write("%s", msg);
-}
-
 // Convert a key to its string represenation
 char *key_to_str_buffer(const char key[KEY_SIZE], char *buffer, size_t length)
 {
@@ -107,15 +95,14 @@ int connect_to_server(const char *host_name, uint16_t port)
 	// Resolve the host name
 	struct hostent *h = gethostbyname(host_name);
 	if ((h == NULL) || (h->h_addr == NULL)) {
-		errno = h_errno;
-		log_perror("gethostbyname");
+		herror("gethostbyname");
 		return -1;
 	}
 
 	// Create a socket fd (IPv4, TCP)
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) {
-		log_perror("socket");
+		perror("socket");
 		return -1;
 	}
 
@@ -125,7 +112,7 @@ int connect_to_server(const char *host_name, uint16_t port)
 	addr.sin_addr = *(struct in_addr*)h->h_addr;
 	addr.sin_port = htons(port);
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-		log_perror("connect");
+		perror("connect");
 		close(fd);
 		return -1;
 	}
@@ -143,7 +130,7 @@ ssize_t read_whole(int fd, void *buffer, size_t length)
 	while (total < length) {
 		ssize_t bytes = read(fd, buffer + total, length - total);
 		if (bytes < 0) {
-			log_perror("read");
+			perror("read");
 			return -1;
 		}
 		if (bytes == 0) {// EOF (the socket was closed on the other end)
@@ -441,7 +428,7 @@ bool send_msg(int fd, void *buffer, size_t length)
 	// Write the message to the socket
 	ssize_t bytes = write(fd, buffer, length);
 	if (bytes < 0) {
-		log_perror("write");
+		perror("write");
 		return false;
 	}
 	assert((size_t)bytes == length);
@@ -536,14 +523,13 @@ int get_local_host_name(char *str, size_t length)
 
 	char my_host_name[HOST_NAME_MAX] = "";
 	if (gethostname(my_host_name, HOST_NAME_MAX) < 0) {
-		log_perror("gethostname");
+		perror("gethostname");
 		return -1;
 	}
 
 	struct hostent *h = gethostbyname(my_host_name);
 	if ((h == NULL) || (h->h_name == NULL)) {
-		errno = h_errno;
-		log_perror("gethostbyname");
+		herror("gethostbyname");
 		return -1;
 	}
 
@@ -559,7 +545,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 	// Create a socket
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) {
-		log_perror("socket");
+		perror("socket");
 		return -1;
 	}
 
@@ -567,7 +553,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 	int opt_val = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&opt_val, sizeof(opt_val)) < 0)
 	{
-		log_perror("setsockopt");
+		perror("setsockopt");
 		close(fd);
 		return -1;
 	}
@@ -587,7 +573,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 		}
 	} else {
 		if ((port == 0) || (new_port == NULL)) {
-			log_perror("bind");
+			perror("bind");
 			close(fd);
 			return -1;
 		}
@@ -595,7 +581,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 		// Try to bind to an arbitrary port
 		addr.sin_port = 0;
 		if (bind(fd, (struct sockaddr*)&addr, addr_len) < 0) {
-			log_perror("bind");
+			perror("bind");
 			close(fd);
 			return -1;
 		}
@@ -607,7 +593,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 		assert(new_port != NULL);
 
 		if (getsockname(fd, (struct sockaddr*)&addr, &addr_len) < 0) {
-			log_perror("getsockname");
+			perror("getsockname");
 			close(fd);
 			return -1;
 		}
@@ -616,7 +602,7 @@ int create_server(uint16_t port, int max_sessions, uint16_t *new_port)
 
 	// Start listening for incoming connections
 	if (listen(fd, max_sessions) < 0) {
-		log_perror("listen");
+		perror("listen");
 		close(fd);
 		return -1;
 	}
@@ -636,7 +622,7 @@ int accept_connection(int fd, int *fd_table, int fd_table_size)
 
 	int connect_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
 	if (connect_fd < 0) {
-		log_perror("accept");
+		perror("accept");
 		return -1;
 	}
 
@@ -670,13 +656,13 @@ int get_peer_info(int fd, char *str, size_t length)
 	struct sockaddr_in addr;
 	socklen_t addr_len = sizeof(addr);
 	if (getpeername(fd, (struct sockaddr*)&addr, &addr_len) < 0) {
-		log_perror("getpeername");
+		perror("getpeername");
 		return -1;
 	}
 
 	struct hostent *h = gethostbyaddr((char*)&addr.sin_addr, sizeof(addr.sin_addr), AF_INET);
 	if ((h == NULL) || (h->h_name == NULL)) {
-		log_perror("gethostbyaddr");
+		perror("gethostbyaddr");
 		return -1;
 	}
 
@@ -698,7 +684,7 @@ static void *waitpid_timeout_thread_f(void *arg)
 	int rc = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	if (rc != 0) {
 		errno = rc;
-		log_perror("pthread_setcanceltype");
+		perror("pthread_setcanceltype");
 		return (void*)-1;
 	}
 
@@ -719,13 +705,13 @@ pid_t waitpid_timeout(pid_t pid, int *status, int timeout)
 
 	pthread_t thread;
 	if (pthread_create(&thread, NULL, waitpid_timeout_thread_f, &args) != 0) {
-		log_perror("pthread_create");
+		perror("pthread_create");
 		return -1;
 	}
 
 	struct timespec ts;
 	if (clock_gettime(CLOCK_REALTIME_COARSE, &ts) < 0) {
-		log_perror("clock_gettime");
+		perror("clock_gettime");
 		return -1;
 	}
 	ts.tv_sec += timeout;
@@ -738,14 +724,14 @@ pid_t waitpid_timeout(pid_t pid, int *status, int timeout)
 		rc = pthread_cancel(thread);
 		if (rc != 0) {
 			errno = rc;
-			log_perror("pthread_cancel");
+			perror("pthread_cancel");
 			return -1;
 		}
 		pthread_join(thread, NULL);
 		return 0;
 	} else {
 		errno = rc;
-		log_perror("pthread_timedjoin_np");
+		perror("pthread_timedjoin_np");
 		return -1;
 	}
 }
