@@ -213,7 +213,7 @@ static bool init_mserver()
 
 	log_write("Metadata server initialized\n");
 
-	kill_safe(&(server_nodes[0].pid), 5);
+	//kill_safe(&(server_nodes[0].pid), 5);
 
 	return true;
 
